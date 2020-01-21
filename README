@@ -1,8 +1,9 @@
 
-Project: OSCDataXfer
+Project: osc-data-transfer
 Organization: New York State Senate
 Author: Ken Zalewski
 Date: 2011-04-26
+Revised: 2019-08-14
 
 This project is a collection of utilities to facilitate the transfer of
 data between NYSenate and OSC.

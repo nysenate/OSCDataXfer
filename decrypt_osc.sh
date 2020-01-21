@@ -2,20 +2,21 @@
 #
 # decrypt_osc.sh - Decrypt data files that were received from OSC.
 #
-# Project: OSCDataXfer
+# Project: osc-data-transfer
 # Author: Ken Zalewski
 # Organization: New York State Senate
 # Date: 2011-04-25
 # Revised: 2011-04-27
 #
 # Note: This script depends on GnuPG (v1, though v2 will work as well) with
-#       IDEA support compiled in.
+#       IDEA support compiled in.  Versions of GnuPG prior to 2016 did not
+#       have the IDEA cipher compiled in due to a copyright issue.  As of
+#       2016, that copyright has expired, so IDEA is now included.
 # Note: The Senate key has a passphrase which much be stored in the file:
 #          $HOME/.gnupg/osc_data_xfer_passphrase.txt
 #
 
 prog=`basename $0`
-gpg=/usr/bin/gpg
 passfile="$HOME/.gnupg/osc_data_xfer_passphrase.txt"
 
 usage() {
@@ -37,5 +38,5 @@ if [ ! -r "$enc_file" ]; then
   exit 1
 fi
 
-$gpg --quiet --batch --passphrase-file "$passfile" "$enc_file"
+gpg --quiet --batch --passphrase-file "$passfile" "$enc_file"
 
