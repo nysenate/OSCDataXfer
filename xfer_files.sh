@@ -163,9 +163,6 @@ fi
 # All work will be done within the local archive directory.
 cd "$local_dir" || exit 1
 
-# Make sure that a toc file exists in the archive directory.
-[ -r "$toc_file" ] || touch "$toc_file"
-
 src_url="sftp://$src_host/$src_dir"
 dest_url="sftp://$dest_host/$dest_dir"
 
@@ -190,7 +187,7 @@ case "$xfer_mode" in
       fpattern="$dlfiles"
     else
       log_msg "All $ftype_str files for [$date_pattern] were already downloaded"
-      fpattern=
+      fpattern="*_NO_FILES_TO_DOWNLOAD"
     fi
     ;;
   get_idl) fpattern="IDL_BKLD_*" ;;
@@ -207,9 +204,12 @@ esac
 ##############################################################################
 if [ $skip_get -ne 1 ]; then
   log_msg "Generating list of $ftype_str files to be downloaded from $src_url"
+  rm -f "$toc_file"
   lftp -u "$src_user",'' "$src_url" << EOF
     cls -1 $fpattern > "$toc_file"
 EOF
+else
+  [ -r "$toc_file" ] || touch "$toc_file"
 fi
 
 fcount=`cat "$toc_file" | wc -l`
@@ -271,6 +271,9 @@ if [ $skip_put -ne 1 ]; then
     # Rename outbound Payserv files on the local server, since these
     # files do not include a timestamp.
     if [ $xfer_mode = "put_paysr" ]; then
+      log_msg "Renaming local files to add a timestamp"
+      ts=`date +%Y%m%d.%H%M%S`
+      sed -e "s;^\(.*\)\$;mv \1 \1.$ts;" "$toc_file" | sh
     fi
   else
     log_msg "There are no files to upload to $dest_url"
