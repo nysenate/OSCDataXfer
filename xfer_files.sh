@@ -88,12 +88,13 @@ config_file=
 date_pattern=
 skip_get=0
 skip_put=0
-keep_files=0
+keep_tmp_files=0
+force_toc_from_local=0
 verbose=0
 
 
 usage() {
-  echo "Usage: $prog [-f config-file] [-d date] [--skip-get] [--skip-put] [--keep-files] [--verbose] transfer_mode" >&2
+  echo "Usage: $prog [-f config-file] [-d date] [--skip-get] [--skip-put] [--keep-tmp-files] [--force-toc-from-local] [--verbose] transfer_mode" >&2
   echo "  where <transfer_mode> is of the form: <direction>:<filetype>" >&2
   echo '  where <direction> is either "get" or "put"' >&2
   echo "    and <filetype> is one of: sfs, shared, idl, paysr" >&2
@@ -113,7 +114,8 @@ while [ $# -gt 0 ]; do
     --date*|-d) shift; date_pattern="$1" ;;
     --skip-get) skip_get=1 ;;
     --skip-put) skip_put=1 ;;
-    --keep*) keep_files=1 ;;
+    --keep*) keep_tmp_files=1 ;;
+    --force*) force_toc_from_local=1 ;;
     --verbose|-v) verbose=1 ;;
     -*) echo "$prog: $1: Unknown option" >&2; usage; exit 1 ;;
     *) xfer_mode="$1" ;;
@@ -166,6 +168,7 @@ cd "$local_dir" || exit 1
 src_url="sftp://$src_host/$src_dir"
 dest_url="sftp://$dest_host/$dest_dir"
 
+# For SFS Senate and SFS Statewide files, we use a date-matching pattern.
 # If a date-matching pattern was not given, then use yesterday's date
 # in the format MMDDYY.
 [ "$date_pattern" ] || date_pattern=`date --date="-1 day" +%m%d%y`
@@ -176,18 +179,24 @@ case "$xfer_mode" in
   get_shared)
     # The statewide files cannot be archived.  The only way to prevent
     # downloading these files more than once is to check against the archive.
-    dlfiles=
-    for ftype in CT XL GL IC IM; do
-      if [ ! -f 9500[01]_D_${ftype}_${date_pattern} ]; then
-        dlfiles="$dlfiles *_D_${ftype}_${date_pattern}"
-      fi
-    done
+    if [ $force_toc_from_local -eq 0 ]; then
+      dlfiles=
+      for ftype in CT XL GL IC IM; do
+        if [ ! -f 9500[01]_D_${ftype}_${date_pattern} ]; then
+          dlfiles="$dlfiles *_D_${ftype}_${date_pattern}"
+        fi
+      done
 
-    if [ "$dlfiles" ]; then
-      fpattern="$dlfiles"
+      if [ "$dlfiles" ]; then
+        fpattern="$dlfiles"
+      else
+        log_msg "All $ftype_str files for [$date_pattern] were already downloaded"
+        fpattern="*_NO_FILES_TO_DOWNLOAD"
+      fi
     else
-      log_msg "All $ftype_str files for [$date_pattern] were already downloaded"
-      fpattern="*_NO_FILES_TO_DOWNLOAD"
+      # If the TOC is being overwritten from matching on local files, then
+      # simply use all the files that are already there.
+      fpattern="*_$date_pattern"
     fi
     ;;
   get_idl) fpattern="IDL_BKLD_*" ;;
@@ -210,6 +219,14 @@ if [ $skip_get -ne 1 ]; then
 EOF
 else
   [ -r "$toc_file" ] || touch "$toc_file"
+fi
+
+# If --force-toc-from-local is used, then the file list will be generated
+# (or overwritten) by matching against the local filenames, rather than the
+# filenames from the source host.  This allows for retransferring of files.
+if [ $force_toc_from_local -eq 1 ]; then
+  log_msg "Generating list of $ftype_str files by matching against local files"
+  ls -1 $fpattern > "$toc_file"
 fi
 
 fcount=`cat "$toc_file" | wc -l`
@@ -238,7 +255,7 @@ if [ $skip_get -ne 1 ]; then
       cat "$lftp_file"
     fi
 
-    log_msg "Downloading $ftype_src files from $src_url"
+    log_msg "Downloading $ftype_str files from $src_url"
     lftp -f "$lftp_file"
     log_msg "Finished downloading $ftype_str files from $src_url"
   else
@@ -263,7 +280,7 @@ if [ $skip_put -ne 1 ]; then
     # Rename Payserv nhrp501 files to "pm25salledg.dat.
     # Truncate the timestamp off the end of Payserv nhrp574a files.
     grep -v '^,' "$toc_file" | \
-      egrep -v '^paysrp\.nhrp(520|574b)' \
+      egrep -v '^paysrp\.nhrp(520|574b)' | \
       sed -e 's;^\(paysrp\.nhrp501\..*\)$;\1 -o pm25salledg.dat;' \
           -e 's;^\(\(paysrp\.nhrp574a\.ac04000\.dat\).*\)$;\1 -o \2;' \
           -e 's;^;put ;' >> "$lftp_file"
@@ -292,7 +309,7 @@ else
   log_msg "Skipping the upload of $ftype_str files to $dest_url"
 fi
 
-if [ $keep_files -ne 1 ]; then
+if [ $keep_tmp_files -ne 1 ]; then
   rm -f "$toc_file" "$lftp_file"
 fi
 
