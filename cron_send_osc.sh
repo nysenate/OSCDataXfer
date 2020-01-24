@@ -17,10 +17,14 @@ log_msg() {
   echo "$ts $@"
 }
 
+log_msg "Sending files to OSC, types=[$ftype_list]"
+
 for ftype in $ftype_list; do
   log_msg "Starting transfer of [$ftype] files to OSC"
   $script_dir/xfer_files.sh put:$ftype
   log_msg "Finished transfer of [$ftype] files to OSC"
 done
+
+log_msg "Completed sending of files to OSC"
 
 exit 0

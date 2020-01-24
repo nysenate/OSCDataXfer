@@ -17,10 +17,14 @@ log_msg() {
   echo "$ts $@"
 }
 
+log_msg "Retrieving files from OSC, types=[$ftype_list]"
+
 for ftype in $ftype_list; do
   log_msg "Starting transfer of [$ftype] files from OSC"
   $script_dir/xfer_files.sh get:$ftype
   log_msg "Finished transfer of [$ftype] files from OSC"
 done
+
+log_msg "Completed retrieval of files from OSC"
 
 exit 0
