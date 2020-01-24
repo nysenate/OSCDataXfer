@@ -226,9 +226,11 @@ if [ $skip_get -ne 1 ]; then
     echo "open -u $src_user,'' $src_url" > "$lftp_file"
     echo "echo Transferring files..." >> "$lftp_file"
     sed 's;^;get ;' "$toc_file" >> "$lftp_file"
+    echo "echo Finished transferring files" >> "$lftp_file"
     if [ $archive_src -eq 1 ]; then
       echo "echo Archiving files..." >> "$lftp_file"
       sed -e 's;^;mv ;' -e 's;$; archive/;' "$toc_file" >> "$lftp_file"
+      echo "echo Finished archiving files" >> "$lftp_file"
     fi
 
     if [ $verbose -eq 1 ]; then
@@ -257,7 +259,15 @@ if [ $skip_put -ne 1 ]; then
     echo "open -u $dest_user,'' $dest_url" > "$lftp_file"
     echo "echo Transferring files..." >> "$lftp_file"
     # Do not upload files that begin with a comma.
-    grep -v '^,' "$toc_file" | sed 's;^;put ;' >> "$lftp_file"
+    # Do not upload Payserv files of type 520 or 574b.
+    # Rename Payserv nhrp501 files to "pm25salledg.dat.
+    # Truncate the timestamp off the end of Payserv nhrp574a files.
+    grep -v '^,' "$toc_file" | \
+      egrep -v '^paysrp\.nhrp(520|574b)' \
+      sed -e 's;^\(paysrp\.nhrp501\..*\)$;\1 -o pm25salledg.dat;' \
+          -e 's;^\(\(paysrp\.nhrp574a\.ac04000\.dat\).*\)$;\1 -o \2;' \
+          -e 's;^;put ;' >> "$lftp_file"
+    echo "echo Finished transferring files" >> "$lftp_file"
 
     if [ $verbose -eq 1 ]; then
       log_msg "Contents of lftp script:"
@@ -268,10 +278,10 @@ if [ $skip_put -ne 1 ]; then
     lftp -f "$lftp_file"
     log_msg "Finished uploading $ftype_str files to $dest_url"
 
-    # Rename outbound Payserv files on the local server, since these
-    # files do not include a timestamp.
+    # Rename outbound Payserv files on the local server,
+    # since these files do not include a timestamp.
     if [ $xfer_mode = "put_paysr" ]; then
-      log_msg "Renaming local files to add a timestamp"
+      log_msg "Renaming local outbound Payserv files to add a timestamp"
       ts=`date +%Y%m%d.%H%M%S`
       sed -e "s;^\(.*\)\$;mv \1 \1.$ts;" "$toc_file" | sh
     fi
