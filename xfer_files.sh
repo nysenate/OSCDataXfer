@@ -7,6 +7,8 @@
 # Organization: New York State Senate
 # Date: 2019-08-14
 # Revised: 2020-01-23 - consolidated into a single transfer script
+# Revised: 2020-01-27 - add timestamp to outbound Payserv files before archiving
+#                     - add --no-transfer option and some other config params
 #
 # This script handles the transfer of files to and from OSC.
 #
@@ -77,7 +79,13 @@ local_dir=
 src_host=
 src_dir=
 src_user=
-archive_src=0
+# If delete_src=1, then each source file will be removed from the source
+# host after it has been transferred.
+# If delete_src=0, then each source file might be moved or renamed,
+# depending on the values given for src_backup_dir and src_backup_suffix.
+delete_src=0
+src_backup_dir=archive
+src_backup_suffix=
 dest_host=
 dest_dir=
 dest_user=
@@ -88,13 +96,14 @@ config_file=
 date_pattern=
 skip_get=0
 skip_put=0
+no_transfer=0
 keep_tmp_files=0
 force_toc_from_local=0
 verbose=0
 
 
 usage() {
-  echo "Usage: $prog [-f config-file] [-d date] [--skip-get] [--skip-put] [--keep-tmp-files] [--force-toc-from-local] [--verbose] transfer_mode" >&2
+  echo "Usage: $prog [-f config-file] [-d date] [--skip-get] [--skip-put] [--no-transfer] [--keep-tmp-files] [--force-toc-from-local] [--verbose] transfer_mode" >&2
   echo "  where <transfer_mode> is of the form: <direction>:<filetype>" >&2
   echo '  where <direction> is either "get" or "put"' >&2
   echo "    and <filetype> is one of: sfs, shared, idl, paysr" >&2
@@ -114,6 +123,7 @@ while [ $# -gt 0 ]; do
     --date*|-d) shift; date_pattern="$1" ;;
     --skip-get) skip_get=1 ;;
     --skip-put) skip_put=1 ;;
+    --no*|-n) no_transfer=1 ;;
     --keep*) keep_tmp_files=1 ;;
     --force*) force_toc_from_local=1 ;;
     --verbose|-v) verbose=1 ;;
@@ -145,7 +155,7 @@ fi
 . "$config_file" || exit 1
 
 # Check that required config parameters were set.
-for p in local_dir src_host src_dir src_user archive_src dest_host dest_dir dest_user; do
+for p in local_dir src_host src_dir src_user delete_src dest_host dest_dir dest_user; do
   if [ -z "${!p}" ]; then
     echo "$prog: $p: Config parameter is not set; check [$config_file]" >&2
     exit 1
@@ -236,17 +246,27 @@ fcount=`cat "$toc_file" | wc -l`
 ##############################################################################
 if [ $skip_get -ne 1 ]; then
   if [ $fcount -ne 0 ]; then
-    log_msg "List of files to be transferred:"
+    log_msg "List of files to be transferred from $src_url:"
     cat "$toc_file"
 
-    log_msg "Generating lftp script for download"
+    log_msg "Generating lftp script for download from $src_url"
     echo "open -u $src_user,'' $src_url" > "$lftp_file"
     echo "echo Transferring files..." >> "$lftp_file"
-    sed 's;^;get ;' "$toc_file" >> "$lftp_file"
+    # If the source files should be deleted, use the -E option to "get"
+    [ $delete_src -eq 1 ] && get_opt="-E" || get_opt=
+    sed "s;^;get $get_opt;" "$toc_file" >> "$lftp_file"
     echo "echo Finished transferring files" >> "$lftp_file"
-    if [ $archive_src -eq 1 ]; then
+
+    if [ $delete_src -eq 0 -a -n "$src_backup_dir" ]; then
+      if [ "$src_backup_suffix" ]; then
+        date_str=`date +%Y%m%d`
+        time_str=`date +%H%M%S`
+        sfx=`echo $src_backup_suffix | sed -e "s;%DATE%;$date_str;g" -e "s;%TIME%;$time_str;g"`
+      else
+        sfx=
+      fi
       echo "echo Archiving files..." >> "$lftp_file"
-      sed -e 's;^;mv ;' -e 's;$; archive/;' "$toc_file" >> "$lftp_file"
+      sed -e 's;^\(.*\)$;mv \1 '"$src_backup_dir/"'\1'"$sfx"';' "$toc_file" >> "$lftp_file"
       echo "echo Finished archiving files" >> "$lftp_file"
     fi
 
@@ -255,9 +275,13 @@ if [ $skip_get -ne 1 ]; then
       cat "$lftp_file"
     fi
 
-    log_msg "Downloading $ftype_str files from $src_url"
-    lftp -f "$lftp_file"
-    log_msg "Finished downloading $ftype_str files from $src_url"
+    if [ $no_transfer -eq 0 ]; then
+      log_msg "Downloading $ftype_str files from $src_url"
+      lftp -f "$lftp_file"
+      log_msg "Finished downloading $ftype_str files from $src_url"
+    else
+      log_msg "Transfer script [$lftp_file] will not be run since --no-transfer was specified"
+    fi
   else
     log_msg "There are no files to download from $src_url"
   fi
@@ -272,7 +296,7 @@ log_msg "There were $fcount $ftype_str file(s) retrieved from $src_url"
 ##############################################################################
 if [ $skip_put -ne 1 ]; then
   if [ $fcount -ne 0 ]; then
-    log_msg "Generating lftp script for upload"
+    log_msg "Generating lftp script for upload to $dest_url"
     echo "open -u $dest_user,'' $dest_url" > "$lftp_file"
     echo "echo Transferring files..." >> "$lftp_file"
     # Do not upload files that begin with a comma.
@@ -291,9 +315,13 @@ if [ $skip_put -ne 1 ]; then
       cat "$lftp_file"
     fi
 
-    log_msg "Uploading $ftype_str files to $dest_url"
-    lftp -f "$lftp_file"
-    log_msg "Finished uploading $ftype_str files to $dest_url"
+    if [ $no_transfer -eq 0 ]; then
+      log_msg "Uploading $ftype_str files to $dest_url"
+      lftp -f "$lftp_file"
+      log_msg "Finished uploading $ftype_str files to $dest_url"
+    else
+      log_msg "Transfer script [$lftp_file] will not be run since --no-transfer was specified"
+    fi
 
     # Rename outbound Payserv files on the local server,
     # since these files do not include a timestamp.
