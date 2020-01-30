@@ -37,8 +37,9 @@
 #   D_CT, D_XL, D_GL, D_IC, and D_IM
 #
 # The SFS IDL files from OSC are of the form:
-#   IDL_BKLD_<filebase>_<datetime>.dat_<date>.txt
-# where <filebase> is the basename of the original file without the extension
+#   <fileType>_BKLD_<filebase>_<datetime>.dat_<date>.txt
+# where <fileType> is one of "IDL" (standard) or "ENL" (error)
+    and <filebase> is the basename of the original file without the extension
 #   and <datetime> is of the form: MMDDYYYY_hhmmss.nnn
 #   and <date> is of the form: YYYY-MM-DD
 #
@@ -209,10 +210,10 @@ case "$xfer_mode" in
       fpattern="*_$date_pattern"
     fi
     ;;
-  get_idl) fpattern="IDL_BKLD_*" ;;
+  get_idl) fpattern="IDL_BKLD_* ENL_BKLD_*" ;;
   get_paysr) fpattern="paysrp.*" ;;
-  put_sfs) fpattern="SEN01* ,SEN01*" ;;
-  put_paysr) fpattern="paysrp.* ,paysrp.*" ;;
+  put_sfs) fpattern="SEN01*.DAT ,SEN01*.DAT" ;;
+  put_paysr) fpattern="paysrp.*.input ,paysrp.*.input" ;;
 esac
 
 [ $verbose -eq 1 ] && log_msg "File matching pattern: $fpattern"
