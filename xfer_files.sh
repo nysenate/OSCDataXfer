@@ -39,7 +39,7 @@
 # The SFS IDL files from OSC are of the form:
 #   <fileType>_BKLD_<filebase>_<datetime>.dat_<date>.txt
 # where <fileType> is one of "IDL" (standard) or "ENL" (error)
-    and <filebase> is the basename of the original file without the extension
+#   and <filebase> is the basename of the original file without the extension
 #   and <datetime> is of the form: MMDDYYYY_hhmmss.nnn
 #   and <date> is of the form: YYYY-MM-DD
 #
